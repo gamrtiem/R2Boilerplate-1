@@ -1,6 +1,6 @@
 ﻿using BepInEx.Logging;
 
-namespace ExamplePlugin
+namespace SteamRecordMarkers
 {
     internal static class Log
     {

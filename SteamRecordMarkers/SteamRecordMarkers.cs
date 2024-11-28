@@ -1,13 +1,18 @@
+using System;
 using BepInEx;
 using R2API;
 using RoR2;
+using System.Collections;
+using BepInEx.Logging;
+using Steamworks;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
+using Run = On.RoR2.Run;
 
-namespace ExamplePlugin
+namespace SteamRecordMarkers
 {
     // This is an example plugin that can be put in
-    // BepInEx/plugins/ExamplePlugin/ExamplePlugin.dll to test out.
+    // BepInEx/plugins/SteamRecordMarkers/SteamRecordMarkers.dll to test out.
     // It's a small plugin that adds a relatively simple item to the game,
     // and gives you that item whenever you press F2.
 
@@ -29,7 +34,7 @@ namespace ExamplePlugin
     // BaseUnityPlugin itself inherits from MonoBehaviour,
     // so you can use this as a reference for what you can declare and use in your plugin class
     // More information in the Unity Docs: https://docs.unity3d.com/ScriptReference/MonoBehaviour.html
-    public class ExamplePlugin : BaseUnityPlugin
+    public class SteamRecordMarkers : BaseUnityPlugin
     {
         // The Plugin GUID should be a unique ID for this plugin,
         // which is human readable (as it is used in places like the config).
@@ -37,19 +42,69 @@ namespace ExamplePlugin
         // we will deprecate this mod.
         // Change the PluginAuthor and the PluginName !
         public const string PluginGUID = PluginAuthor + "." + PluginName;
-        public const string PluginAuthor = "AuthorName";
-        public const string PluginName = "ExamplePlugin";
+        public const string PluginAuthor = "icebro";
+        public const string PluginName = "SteamRecordMarkers";
         public const string PluginVersion = "1.0.0";
 
         // We need our item definition to persist through our functions, and therefore make it a class field.
         private static ItemDef myItemDef;
+
+        internal static ManualLogSource log { get; private set; }
+        public static void AddHooks()
+        {
+            /* CharacterBody.onBodyStartGlobal += CharacterBody_onBodyStartGlobal;
+            CharacterBody.onBodyDestroyGlobal += CharacterBody_onBodyDestroyGlobal;
+            Stage.onStageStartGlobal += Stage_onStageStartGlobal;
+            On.RoR2.TeleporterInteraction.FixedUpdate += TeleporterInteraction_FixedUpdate;
+            On.RoR2.EscapeSequenceController.SetCountdownTime += EscapeSequenceController_SetCountdownTime;
+            On.RoR2.InfiniteTowerRun.BeginNextWave += InfiniteTowerRun_BeginNextWave;
+            On.RoR2.UI.MainMenu.BaseMainMenuScreen.OnEnter += BaseMainMenuScreen_OnEnter;
+            On.RoR2.Run.OnClientGameOver += Run_OnClientGameOver; */
+            On.RoR2.Run.OnClientGameOver += Run_OnClientGameOver;
+        }
+
+        private static void Run_OnClientGameOver(Run.orig_OnClientGameOver orig, RoR2.Run self, RunReport runreport)
+        {
+            if (SteamManager.Initialized)
+            {
+                string name = SteamFriends.GetPersonaName();
+                log.LogWarning(name);
+                log.LogWarning("Steam Record Markers loading !");
+                SteamTimeline.AddTimelineEvent("medkit32", "load", "yeah", 0, 0, 1f,
+                    ETimelineEventClipPriority.k_ETimelineEventClipPriority_Standard);
+            }
+            else
+            {
+                log.LogError("steam manager not initialized! !");
+            }
+        }
+
+
+        public void OnEnable()
+        {
+            AddHooks();
+        }
+
+        // public void Start()
+        // {
+        //     Logger.LogWarning("Steam Record Markers loading !");
+        //     SteamTimeline.AddTimelineEvent("medkit32", "load", "yeah", 0, 0, 1f, ETimelineEventClipPriority.k_ETimelineEventClipPriority_Standard);
+        // }
+        void Start() {
+            if(SteamManager.Initialized) {
+                string name = SteamFriends.GetPersonaName();
+                Logger.LogWarning(name);
+                Logger.LogWarning("Steam Record Markers loading !");
+                SteamTimeline.AddTimelineEvent("medkit32", "load", "yeah", 0, 0, 1f, ETimelineEventClipPriority.k_ETimelineEventClipPriority_Standard);
+            }
+        }
 
         // The Awake() method is run at the very start when the game is initialized.
         public void Awake()
         {
             // Init our logging class so that we can properly log for debugging
             Log.Init(Logger);
-
+            
             // First let's define our item
             myItemDef = ScriptableObject.CreateInstance<ItemDef>();
 
@@ -63,9 +118,9 @@ namespace ExamplePlugin
             // The tier determines what rarity the item is:
             // Tier1=white, Tier2=green, Tier3=red, Lunar=Lunar, Boss=yellow,
             // and finally NoTier is generally used for helper items, like the tonic affliction
-#pragma warning disable Publicizer001 // Accessing a member that was not originally public. Here we ignore this warning because with how this example is setup we are forced to do this
+            // Accessing a member that was not originally public. Here we ignore this warning because with how this example is setup we are forced to do this
             myItemDef._itemTierDef = Addressables.LoadAssetAsync<ItemTierDef>("RoR2/Base/Common/Tier2Def.asset").WaitForCompletion();
-#pragma warning restore Publicizer001
+
             // Instead of loading the itemtierdef directly, you can also do this like below as a workaround
             // myItemDef.deprecatedTier = ItemTier.Tier2;
 
@@ -137,6 +192,23 @@ namespace ExamplePlugin
 
                 Log.Info($"Player pressed F2. Spawning our custom item at coordinates {transform.position}");
                 PickupDropletController.CreatePickupDroplet(PickupCatalog.FindPickupIndex(myItemDef.itemIndex), transform.position, transform.forward * 20f);
+                
+                if (SteamManager.Initialized)
+                {
+                    string name = SteamFriends.GetPersonaName();
+                    Log.Warning(name);
+                    Log.Warning("Steam Record Markers loading !");
+                    SteamTimeline.AddTimelineEvent("medkit32", "load", "yeah", 0, 0, 1f,
+                        ETimelineEventClipPriority.k_ETimelineEventClipPriority_Standard);
+                }
+                else
+                {
+                    Log.Error("steam manager not initialized! !");
+                    Log.Error("steam manager not initialized! !");
+                    Log.Error("steam manager not initialized! !");
+                    Log.Error("steam manager not initialized! !");
+                    Log.Error("steam manager not initialized! !");
+                }
             }
         }
     }
