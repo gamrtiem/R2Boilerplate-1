@@ -45,8 +45,8 @@ namespace ExamplePlugin
         // we will deprecate this mod.
         // Change the PluginAuthor and the PluginName !
         public const string PluginGUID = PluginAuthor + "." + PluginName;
-        public const string PluginAuthor = "AuthorName";
-        public const string PluginName = "ExamplePlugin";
+        public const string PluginAuthor = "icebro";
+        public const string PluginName = "soda got me on that sillyness!!";
         public const string PluginVersion = "1.0.0";
 
         // We need our item definition to persist through our functions, and therefore make it a class field.
@@ -55,6 +55,7 @@ namespace ExamplePlugin
         public static BuffDef myBuffDef;
         public int itemStacks = 0;
         public int buffStacks = 0;
+        public int buffAmount = 8;
 
         // The Awake() method is run at the very start when the game is initialized.
         public void Awake()
@@ -134,6 +135,7 @@ namespace ExamplePlugin
             On.RoR2.CharacterBody.Start += CharacterBody_Start;
             
         }
+        
 
 
 
@@ -148,10 +150,10 @@ namespace ExamplePlugin
                 itemStacks = self.GetItemCount(myItemDef); // update itemstacks
                 for(int j = 0; j < count; j++)
                 {
-                    if (buffStacks >= 8)
+                    if (buffStacks >= buffAmount)
                     {
-                        buffStacks -= 8; // since you can only pick up 1 item at a time, we only add 8
-                        for(int i = 0; i < 8; i++)
+                        buffStacks -= buffAmount; // since you can only pick up 1 item at a time, we only add 8
+                        for(int i = 0; i < buffAmount; i++)
                         {
                             self.GetComponent<RoR2.CharacterMaster>().GetBody().RemoveBuff(myBuffDef);
                         }
@@ -182,9 +184,9 @@ namespace ExamplePlugin
                     itemStacks = self.GetItemCount(myItemDef); // update itemstacks
                     for (int j = 0; j < count; j++)
                     {
-                        buffStacks += 8; // since you can only pick up 1 item at a time, we only add 8
+                        buffStacks += buffAmount; // since you can only pick up 1 item at a time, we only add 8
                         if (self.GetComponent<RoR2.CharacterMaster>() != null)
-                            for (int i = 0; i < 8; i++)
+                            for (int i = 0; i < buffAmount; i++)
                             {
                                 self.GetComponent<RoR2.CharacterMaster>().GetBody().AddBuff(myBuffDef);
                             }
@@ -216,7 +218,7 @@ namespace ExamplePlugin
                 {
                     itemStacks = itemCount; // update itemstacks
 
-                    buffStacks = itemStacks * 8; // since you can only pick up 1 item at a time, we only add 8
+                    buffStacks = itemStacks * buffAmount; // since you can only pick up 1 item at a time, we only add 8
 
                     for (int i = 0; i < buffStacks; i++)
                     {
@@ -233,12 +235,12 @@ namespace ExamplePlugin
             {
                 buffStacks -= 1;
                 context.activatorBody.RemoveBuff(myBuffDef);
-                if (buffStacks % 8 == 0)
+                if (buffStacks % buffAmount == 0)
                 {
                     context.activatorBody.inventory.GiveItem(myItemDef2);
                     context.activatorBody.inventory.RemoveItem(myItemDef);
                     if(buffStacks != 0)
-                        for(int i = 0; i < 8; i++)
+                        for(int i = 0; i < buffAmount; i++)
                         {
                             context.activatorBody.AddBuff(myBuffDef);
                         }
