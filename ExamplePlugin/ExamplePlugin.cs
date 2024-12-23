@@ -1,8 +1,16 @@
+using System.Reflection;
 using BepInEx;
+using IL.EntityStates.BrotherMonster;
+using On.RoR2.Items;
 using R2API;
 using RoR2;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
+using UnityEngine.Bindings;
+using CharacterBody = On.RoR2.CharacterBody;
+using CharacterMaster = On.RoR2.CharacterMaster;
+using Inventory = On.RoR2.Inventory;
+using NetworkExtensions = On.RoR2.NetworkExtensions;
 
 namespace ExamplePlugin
 {
@@ -43,6 +51,10 @@ namespace ExamplePlugin
 
         // We need our item definition to persist through our functions, and therefore make it a class field.
         private static ItemDef myItemDef;
+        private static ItemDef myItemDef2;
+        public static BuffDef myBuffDef;
+        public int itemStacks = 0;
+        public int buffStacks = 0;
 
         // The Awake() method is run at the very start when the game is initialized.
         public void Awake()
@@ -52,37 +64,46 @@ namespace ExamplePlugin
 
             // First let's define our item
             myItemDef = ScriptableObject.CreateInstance<ItemDef>();
+            myItemDef2 = ScriptableObject.CreateInstance<ItemDef>();
 
             // Language Tokens, explained there https://risk-of-thunder.github.io/R2Wiki/Mod-Creation/Assets/Localization/
-            myItemDef.name = "EXAMPLE_CLOAKONKILL_NAME";
-            myItemDef.nameToken = "EXAMPLE_CLOAKONKILL_NAME";
-            myItemDef.pickupToken = "EXAMPLE_CLOAKONKILL_PICKUP";
-            myItemDef.descriptionToken = "EXAMPLE_CLOAKONKILL_DESC";
-            myItemDef.loreToken = "EXAMPLE_CLOAKONKILL_LORE";
+            myItemDef.name = "SF_BOILINGTHERMOS_NAME";
+            myItemDef.nameToken = "SF_BOILINGTHERMOS_NAME";
+            myItemDef.pickupToken = "SF_BOILINGTHERMOS_PICKUP";
+            myItemDef.descriptionToken = "SF_BOILINGTHERMOS_DESC";
+            myItemDef.loreToken = "SF_BOILINGTHERMOS_LORE";
+            
+            myItemDef2.name = "SF_BOILINGTHERMOSUSED_NAME";
+            myItemDef2.nameToken = "SF_BOILINGTHERMOSUSED_NAME";
+            myItemDef2.pickupToken = "SF_BOILINGTHERMOSUSED_PICKUP";
+            myItemDef2.descriptionToken = "SF_BOILINGTHERMOSUSED_DESC";
+            myItemDef2.loreToken = "SF_BOILINGTHERMOSUSED_LORE";
 
             // The tier determines what rarity the item is:
             // Tier1=white, Tier2=green, Tier3=red, Lunar=Lunar, Boss=yellow,
             // and finally NoTier is generally used for helper items, like the tonic affliction
-#pragma warning disable Publicizer001 // Accessing a member that was not originally public. Here we ignore this warning because with how this example is setup we are forced to do this
-            myItemDef._itemTierDef = Addressables.LoadAssetAsync<ItemTierDef>("RoR2/Base/Common/Tier2Def.asset").WaitForCompletion();
-#pragma warning restore Publicizer001
+            myItemDef._itemTierDef = Addressables.LoadAssetAsync<ItemTierDef>("RoR2/Base/Common/Tier1Def.asset")
+                .WaitForCompletion();
+            myItemDef2._itemTierDef = Addressables.LoadAssetAsync<ItemTierDef>("RoR2/Base/Common/NoTier.asset")
+                .WaitForCompletion();
             // Instead of loading the itemtierdef directly, you can also do this like below as a workaround
             // myItemDef.deprecatedTier = ItemTier.Tier2;
 
             // You can create your own icons and prefabs through assetbundles, but to keep this boilerplate brief, we'll be using question marks.
-            myItemDef.pickupIconSprite = Addressables.LoadAssetAsync<Sprite>("RoR2/Base/Common/MiscIcons/texMysteryIcon.png").WaitForCompletion();
-            myItemDef.pickupModelPrefab = Addressables.LoadAssetAsync<GameObject>("RoR2/Base/Mystery/PickupMystery.prefab").WaitForCompletion();
-
-            // Can remove determines
-            // if a shrine of order,
-            // or a printer can take this item,
-            // generally true, except for NoTier items.
+            myItemDef.pickupIconSprite = Addressables
+                .LoadAssetAsync<Sprite>("RoR2/Base/Common/MiscIcons/texMysteryIcon.png").WaitForCompletion();
+            myItemDef.pickupModelPrefab = Addressables
+                .LoadAssetAsync<GameObject>("RoR2/Base/Mystery/PickupMystery.prefab").WaitForCompletion();
+    
+            myItemDef2.pickupIconSprite = Addressables
+                .LoadAssetAsync<Sprite>("RoR2/Base/Common/MiscIcons/texMysteryIcon.png").WaitForCompletion();
+            
             myItemDef.canRemove = true;
+            myItemDef2.canRemove = false;
 
-            // Hidden means that there will be no pickup notification,
-            // and it won't appear in the inventory at the top of the screen.
-            // This is useful for certain noTier helper items, such as the DrizzlePlayerHelper.
             myItemDef.hidden = false;
+            myItemDef2.hidden = false;
+            myItemDef2.tags = [ItemTag.WorldUnique];
 
             // You can add your own display rules here,
             // where the first argument passed are the default display rules:
@@ -93,36 +114,158 @@ namespace ExamplePlugin
 
             // Then finally add it to R2API
             ItemAPI.Add(new CustomItem(myItemDef, displayRules));
+            ItemAPI.Add(new CustomItem(myItemDef2, displayRules));
+            myBuffDef = ScriptableObject.CreateInstance<BuffDef>();
+            myBuffDef.isDebuff = false;
+            myBuffDef.buffColor = Color.white;
+            myBuffDef.iconSprite = Addressables.LoadAssetAsync<Sprite>("RoR2/Base/Common/MiscIcons/texMysteryIcon.png")
+                .WaitForCompletion();
+            myBuffDef.isCooldown = false;
+            myBuffDef.canStack = true;
+            R2API.ContentAddition.AddBuffDef(myBuffDef);
 
             // But now we have defined an item, but it doesn't do anything yet. So we'll need to define that ourselves.
-            GlobalEventManager.onCharacterDeathGlobal += GlobalEventManager_onCharacterDeathGlobal;
+
+            //CharacterBody.OnInventoryChanged += CharacterBody_OnInventoryChanged;
+            On.RoR2.Inventory.GiveItem_ItemIndex_int += Inventory_GiveItem_ItemDef_int;
+            On.RoR2.Inventory.RemoveItem_ItemIndex_int += Inventory_RemoveItem_ItemDef_int;
+            RecalculateStatsAPI.GetStatCoefficients += RecalculateStatsAPI_GetStatCoefficients;
+            MultiShopCardUtils.OnMoneyPurchase += MultiShopCardUtils_OnMoneyPurchase;
+            On.RoR2.CharacterBody.Start += CharacterBody_Start;
+            
         }
 
-        private void GlobalEventManager_onCharacterDeathGlobal(DamageReport report)
+
+
+        private void Inventory_RemoveItem_ItemDef_int(Inventory.orig_RemoveItem_ItemIndex_int orig, RoR2.Inventory self,
+            ItemIndex itemindex, int count)
         {
-            // If a character was killed by the world, we shouldn't do anything.
-            if (!report.attacker || !report.attackerBody)
+            orig(self, itemindex, count);
+            Logger.LogInfo("GiveItem_ItemDef_int " + itemindex);
+            var itemindex2 = ItemCatalog.FindItemIndex(myItemDef.name);
+            if (itemindex == itemindex2)
             {
-                return;
-            }
-
-            var attackerCharacterBody = report.attackerBody;
-
-            // We need an inventory to do check for our item
-            if (attackerCharacterBody.inventory)
-            {
-                // Store the amount of our item we have
-                var garbCount = attackerCharacterBody.inventory.GetItemCount(myItemDef.itemIndex);
-                if (garbCount > 0 &&
-                    // Roll for our 50% chance.
-                    Util.CheckRoll(50, attackerCharacterBody.master))
+                itemStacks = self.GetItemCount(myItemDef); // update itemstacks
+                for(int j = 0; j < count; j++)
                 {
-                    // Since we passed all checks, we now give our attacker the cloaked buff.
-                    // Note how we are scaling the buff duration depending on the number of the custom item in our inventory.
-                    attackerCharacterBody.AddTimedBuff(RoR2Content.Buffs.Cloak, 3 + garbCount);
+                    if (buffStacks >= 8)
+                    {
+                        buffStacks -= 8; // since you can only pick up 1 item at a time, we only add 8
+                        for(int i = 0; i < 8; i++)
+                        {
+                            self.GetComponent<RoR2.CharacterMaster>().GetBody().RemoveBuff(myBuffDef);
+                        }
+                    }
+                    else
+                    {
+                        for(int i = 0; i < buffStacks; i++)
+                        {
+                            self.GetComponent<RoR2.CharacterMaster>().GetBody().RemoveBuff(myBuffDef);
+                        }
+                        buffStacks = 0;
+
+                    }
+                }
+
+            }
+            
+        }
+
+        private void Inventory_GiveItem_ItemDef_int(Inventory.orig_GiveItem_ItemIndex_int orig, RoR2.Inventory self, ItemIndex itemIndex, int count)
+        {
+            orig(self, itemIndex, count);
+            if (self != null)
+            {
+                var itemindex = ItemCatalog.FindItemIndex(myItemDef.name);
+                if (itemIndex == itemindex)
+                {
+                    itemStacks = self.GetItemCount(myItemDef); // update itemstacks
+                    for (int j = 0; j < count; j++)
+                    {
+                        buffStacks += 8; // since you can only pick up 1 item at a time, we only add 8
+                        if (self.GetComponent<RoR2.CharacterMaster>() != null)
+                            for (int i = 0; i < 8; i++)
+                            {
+                                self.GetComponent<RoR2.CharacterMaster>().GetBody().AddBuff(myBuffDef);
+                            }
+                    }
                 }
             }
         }
+
+        private void CharacterBody_Start(CharacterBody.orig_Start orig, RoR2.CharacterBody self)
+        {
+            orig(self);
+            if (self.inventory != null)
+            {
+                int itemCount = self.inventory.GetItemCount(myItemDef2);
+
+                if (itemCount > 0)
+                {
+                    self.inventory.RemoveItem(myItemDef2, itemCount);
+                    self.inventory.GiveItem(myItemDef, itemCount);
+                    for(int i = 0; i < buffStacks; i++) // since we're adding the item again it actually addsthe buff twice and no good .,,.
+                    {
+                        self.RemoveBuff(myBuffDef);
+                    }
+                }
+
+                itemCount = self.inventory.GetItemCount(myItemDef);
+
+                if (itemCount > 0)
+                {
+                    itemStacks = itemCount; // update itemstacks
+
+                    buffStacks = itemStacks * 8; // since you can only pick up 1 item at a time, we only add 8
+
+                    for (int i = 0; i < buffStacks; i++)
+                    {
+                        self.GetBody().AddBuff(myBuffDef);
+                    }
+                }
+            }
+        }
+
+        private void MultiShopCardUtils_OnMoneyPurchase(MultiShopCardUtils.orig_OnMoneyPurchase orig, CostTypeDef.PayCostContext context)
+        {
+            orig(context);
+            if (context.activatorBody.inventory.GetItemCount(myItemDef) > 0)
+            {
+                buffStacks -= 1;
+                context.activatorBody.RemoveBuff(myBuffDef);
+                if (buffStacks % 8 == 0)
+                {
+                    context.activatorBody.inventory.GiveItem(myItemDef2);
+                    context.activatorBody.inventory.RemoveItem(myItemDef);
+                    if(buffStacks != 0)
+                        for(int i = 0; i < 8; i++)
+                        {
+                            context.activatorBody.AddBuff(myBuffDef);
+                        }
+                }
+
+            }
+        }
+
+        private void RecalculateStatsAPI_GetStatCoefficients(RoR2.CharacterBody sender, RecalculateStatsAPI.StatHookEventArgs args)
+        {
+            
+            if(sender)
+            {
+                int count = sender.GetBuffCount(myBuffDef);
+                if(count != 0)
+                {
+                    Debug.Log("starting moveSpeedMultAdd: " + args.moveSpeedMultAdd);
+                    args.moveSpeedMultAdd += 0.035f * buffStacks;
+                    Debug.Log("Ending moveSpeedMultAdd: " + args.moveSpeedMultAdd);
+                }
+            }
+            //sender.moveSpeed = sender.baseMoveSpeed * (sender.GetBuffCount(myBuffDef));
+        }
+
+
+        
+        
 
         // The Update() method is run on every frame of the game.
         private void Update()
