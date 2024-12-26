@@ -46,15 +46,15 @@ namespace ExamplePlugin
         // Change the PluginAuthor and the PluginName !
         public const string PluginGUID = PluginAuthor + "." + PluginName;
         public const string PluginAuthor = "icebro";
-        public const string PluginName = "soda got me on that sillyness!!";
+        public const string PluginName = "sodagotmeonthatsillyness";
         public const string PluginVersion = "1.0.0";
 
         // We need our item definition to persist through our functions, and therefore make it a class field.
         private static ItemDef myItemDef;
         private static ItemDef myItemDef2;
         public static BuffDef myBuffDef;
-        public int itemStacks = 0;
-        public int buffStacks = 0;
+        //public int itemStacks = 0;
+        //public int buffStacks = 0;
         public int buffAmount = 8;
 
         // The Awake() method is run at the very start when the game is initialized.
@@ -147,25 +147,11 @@ namespace ExamplePlugin
             var itemindex2 = ItemCatalog.FindItemIndex(myItemDef.name);
             if (itemindex == itemindex2)
             {
-                itemStacks = self.GetItemCount(myItemDef); // update itemstacks
-                for(int j = 0; j < count; j++)
+                if (self.GetItemCount(myItemDef) == 0)
                 {
-                    if (buffStacks >= buffAmount)
+                    for(int i = 0; i < buffAmount; i++)
                     {
-                        buffStacks -= buffAmount; // since you can only pick up 1 item at a time, we only add 8
-                        for(int i = 0; i < buffAmount; i++)
-                        {
-                            self.GetComponent<RoR2.CharacterMaster>().GetBody().RemoveBuff(myBuffDef);
-                        }
-                    }
-                    else
-                    {
-                        for(int i = 0; i < buffStacks; i++)
-                        {
-                            self.GetComponent<RoR2.CharacterMaster>().GetBody().RemoveBuff(myBuffDef);
-                        }
-                        buffStacks = 0;
-
+                        self.GetComponent<RoR2.CharacterMaster>().GetBody().RemoveBuff(myBuffDef);
                     }
                 }
 
@@ -179,19 +165,14 @@ namespace ExamplePlugin
             if (self != null)
             {
                 var itemindex = ItemCatalog.FindItemIndex(myItemDef.name);
-                if (itemIndex == itemindex)
+                if (itemIndex == itemindex && self.GetItemCount(itemindex) - count == 0)
                 {
-                    itemStacks = self.GetItemCount(myItemDef); // update itemstacks
-                    for (int j = 0; j < count; j++)
-                    {
-                        buffStacks += buffAmount; // since you can only pick up 1 item at a time, we only add 8
-                        if (self.GetComponent<RoR2.CharacterMaster>() != null)
-                            for (int i = 0; i < buffAmount; i++)
-                            {
-                                self.GetComponent<RoR2.CharacterMaster>().GetBody().AddBuff(myBuffDef);
-                            }
-                    }
-                }
+                    if (self.GetComponent<RoR2.CharacterMaster>() != null)
+                        for (int i = 0; i < buffAmount; i++)
+                        {
+                            self.GetComponent<RoR2.CharacterMaster>().GetBody().AddBuff(myBuffDef);
+                        }
+                } 
             }
         }
 
@@ -201,30 +182,25 @@ namespace ExamplePlugin
             if (self.inventory != null)
             {
                 int itemCount = self.inventory.GetItemCount(myItemDef2);
-
+                
                 if (itemCount > 0)
                 {
                     self.inventory.RemoveItem(myItemDef2, itemCount);
                     self.inventory.GiveItem(myItemDef, itemCount);
-                    for(int i = 0; i < buffStacks; i++) // since we're adding the item again it actually addsthe buff twice and no good .,,.
-                    {
-                        self.RemoveBuff(myBuffDef);
-                    }
                 }
 
                 itemCount = self.inventory.GetItemCount(myItemDef);
 
                 if (itemCount > 0)
                 {
-                    itemStacks = itemCount; // update itemstacks
+                    CharacterMasterNotificationQueue.SendTransformNotification(self.master, myItemDef2.itemIndex, myItemDef.itemIndex, CharacterMasterNotificationQueue.TransformationType.Default);
 
-                    buffStacks = itemStacks * buffAmount; // since you can only pick up 1 item at a time, we only add 8
-
-                    for (int i = 0; i < buffStacks; i++)
-                    {
-                        self.GetBody().AddBuff(myBuffDef);
-                    }
+                    //for (int i = 0; i < buffAmount; i++)
+                    //{
+                    //    self.GetBody().AddBuff(myBuffDef);
+                    //}
                 }
+                
             }
         }
 
@@ -233,17 +209,20 @@ namespace ExamplePlugin
             orig(context);
             if (context.activatorBody.inventory.GetItemCount(myItemDef) > 0)
             {
-                buffStacks -= 1;
                 context.activatorBody.RemoveBuff(myBuffDef);
-                if (buffStacks % buffAmount == 0)
+                if (context.activatorBody.GetBuffCount(myBuffDef) % buffAmount == 0)
                 {
-                    context.activatorBody.inventory.GiveItem(myItemDef2);
-                    context.activatorBody.inventory.RemoveItem(myItemDef);
-                    if(buffStacks != 0)
-                        for(int i = 0; i < buffAmount; i++)
-                        {
-                            context.activatorBody.AddBuff(myBuffDef);
-                        }
+                    for(int i = 0; i < context.activatorBody.inventory.GetItemCount(myItemDef); i++)
+                    {
+                        context.activatorBody.inventory.GiveItem(myItemDef2);
+                        
+                    }
+                    for (int i = 0; i < context.activatorBody.inventory.GetItemCount(myItemDef2); i++) // we need to do it after because otherwise it changes how many loops it goes through and only removes like half lol
+                    {
+                        context.activatorBody.inventory.RemoveItem(myItemDef);
+                    }
+                    CharacterMasterNotificationQueue.SendTransformNotification(context.activatorBody.master, myItemDef.itemIndex, myItemDef2.itemIndex, CharacterMasterNotificationQueue.TransformationType.Default);
+
                 }
 
             }
@@ -257,14 +236,19 @@ namespace ExamplePlugin
                 int count = sender.GetBuffCount(myBuffDef);
                 if(count != 0)
                 {
-                    Debug.Log("starting moveSpeedMultAdd: " + args.moveSpeedMultAdd);
-                    args.moveSpeedMultAdd += 0.035f * buffStacks;
-                    Debug.Log("Ending moveSpeedMultAdd: " + args.moveSpeedMultAdd);
+                    Logger.LogInfo("starting moveSpeedMultAdd: " + args.moveSpeedMultAdd);
+                    args.moveSpeedMultAdd += 0.035f * sender.GetBuffCount(myBuffDef) + (4f - 0.035f * sender.GetBuffCount(myBuffDef)) * (1f - 1f / (1f + 0.009f * sender.GetBuffCount(myBuffDef) * (sender.inventory.GetItemCount(myItemDef) - 1f))); //(1f-1f/(1f+0.035f*sender.GetBuffCount(myBuffDef)*(sender.inventory.GetItemCount(myItemDef)))); //0.035f*48 + (5f - 0.035f) * (1 - 1 / (1 + 0.035f * ((sender.inventory.GetItemCount(myItemDef)- 1 * sender.GetBuffCount(myBuffDef)) ))); //baseValue + (maxValue - baseValue) * (1 - 1 / (1 + additionalValue * (itemCount - 1)));
+                    Logger.LogInfo("Ending moveSpeedMultAdd: " + args.moveSpeedMultAdd);
                 }
             }
-            //sender.moveSpeed = sender.baseMoveSpeed * (sender.GetBuffCount(myBuffDef));
         }
-
+        public static float GetHyperbolic(float firstStack, float cap, float chance) // Util.ConvertAmplificationPercentageIntoReductionPercentage but Better :zanysoup: // i heart stealing from wellroundedbalance
+        {
+            if (firstStack >= cap) return cap * (chance / firstStack); // should not happen, but failsafe
+            float count = chance / firstStack;
+            float coeff = 100 * firstStack / (cap - firstStack); // should be good
+            return cap * (1 - (100 / ((count * coeff) + 100)));
+        }
 
         
         
