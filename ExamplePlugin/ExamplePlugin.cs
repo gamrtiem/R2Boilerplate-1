@@ -1,157 +1,108 @@
-using System.Reflection;
 using BepInEx;
-using IL.EntityStates.BrotherMonster;
 using On.RoR2.Items;
 using R2API;
 using RoR2;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
-using UnityEngine.Bindings;
 using CharacterBody = On.RoR2.CharacterBody;
-using CharacterMaster = On.RoR2.CharacterMaster;
 using Inventory = On.RoR2.Inventory;
-using NetworkExtensions = On.RoR2.NetworkExtensions;
 
 namespace ExamplePlugin
 {
-    // This is an example plugin that can be put in
-    // BepInEx/plugins/ExamplePlugin/ExamplePlugin.dll to test out.
-    // It's a small plugin that adds a relatively simple item to the game,
-    // and gives you that item whenever you press F2.
-
-    // This attribute specifies that we have a dependency on a given BepInEx Plugin,
-    // We need the R2API ItemAPI dependency because we are using for adding our item to the game.
-    // You don't need this if you're not using R2API in your plugin,
-    // it's just to tell BepInEx to initialize R2API before this plugin so it's safe to use R2API.
     [BepInDependency(ItemAPI.PluginGUID)]
-
-    // This one is because we use a .language file for language tokens
-    // More info in https://risk-of-thunder.github.io/R2Wiki/Mod-Creation/Assets/Localization/
+    
     [BepInDependency(LanguageAPI.PluginGUID)]
-
-    // This attribute is required, and lists metadata for your plugin.
+    
     [BepInPlugin(PluginGUID, PluginName, PluginVersion)]
-
-    // This is the main declaration of our plugin class.
-    // BepInEx searches for all classes inheriting from BaseUnityPlugin to initialize on startup.
-    // BaseUnityPlugin itself inherits from MonoBehaviour,
-    // so you can use this as a reference for what you can declare and use in your plugin class
-    // More information in the Unity Docs: https://docs.unity3d.com/ScriptReference/MonoBehaviour.html
+    
     public class ExamplePlugin : BaseUnityPlugin
     {
-        // The Plugin GUID should be a unique ID for this plugin,
-        // which is human readable (as it is used in places like the config).
-        // If we see this PluginGUID as it is on thunderstore,
-        // we will deprecate this mod.
-        // Change the PluginAuthor and the PluginName !
         public const string PluginGUID = PluginAuthor + "." + PluginName;
         public const string PluginAuthor = "icebro";
         public const string PluginName = "sodagotmeonthatsillyness";
         public const string PluginVersion = "1.0.0";
 
-        // We need our item definition to persist through our functions, and therefore make it a class field.
-        private static ItemDef myItemDef;
-        private static ItemDef myItemDef2;
-        public static BuffDef myBuffDef;
-        //public int itemStacks = 0;
-        //public int buffStacks = 0;
+        private static ItemDef boilingThermos;
+        private static ItemDef boilingThermosUsed;
+        public static BuffDef boilingThermosBuff;
+
         public int buffAmount = 8;
 
-        // The Awake() method is run at the very start when the game is initialized.
         public void Awake()
         {
-            // Init our logging class so that we can properly log for debugging
             Log.Init(Logger);
 
-            // First let's define our item
-            myItemDef = ScriptableObject.CreateInstance<ItemDef>();
-            myItemDef2 = ScriptableObject.CreateInstance<ItemDef>();
+            boilingThermos = ScriptableObject.CreateInstance<ItemDef>();
+            boilingThermosUsed = ScriptableObject.CreateInstance<ItemDef>();
 
-            // Language Tokens, explained there https://risk-of-thunder.github.io/R2Wiki/Mod-Creation/Assets/Localization/
-            myItemDef.name = "SF_BOILINGTHERMOS_NAME";
-            myItemDef.nameToken = "SF_BOILINGTHERMOS_NAME";
-            myItemDef.pickupToken = "SF_BOILINGTHERMOS_PICKUP";
-            myItemDef.descriptionToken = "SF_BOILINGTHERMOS_DESC";
-            myItemDef.loreToken = "SF_BOILINGTHERMOS_LORE";
+            boilingThermos.name = "SF_BOILINGTHERMOS_NAME";
+            boilingThermos.nameToken = "SF_BOILINGTHERMOS_NAME";
+            boilingThermos.pickupToken = "SF_BOILINGTHERMOS_PICKUP";
+            boilingThermos.descriptionToken = "SF_BOILINGTHERMOS_DESC";
+            boilingThermos.loreToken = "SF_BOILINGTHERMOS_LORE";
             
-            myItemDef2.name = "SF_BOILINGTHERMOSUSED_NAME";
-            myItemDef2.nameToken = "SF_BOILINGTHERMOSUSED_NAME";
-            myItemDef2.pickupToken = "SF_BOILINGTHERMOSUSED_PICKUP";
-            myItemDef2.descriptionToken = "SF_BOILINGTHERMOSUSED_DESC";
-            myItemDef2.loreToken = "SF_BOILINGTHERMOSUSED_LORE";
-
-            // The tier determines what rarity the item is:
-            // Tier1=white, Tier2=green, Tier3=red, Lunar=Lunar, Boss=yellow,
-            // and finally NoTier is generally used for helper items, like the tonic affliction
-            myItemDef._itemTierDef = Addressables.LoadAssetAsync<ItemTierDef>("RoR2/Base/Common/Tier1Def.asset")
+            boilingThermosUsed.name = "SF_BOILINGTHERMOSUSED_NAME";
+            boilingThermosUsed.nameToken = "SF_BOILINGTHERMOSUSED_NAME";
+            boilingThermosUsed.pickupToken = "SF_BOILINGTHERMOSUSED_PICKUP";
+            boilingThermosUsed.descriptionToken = "SF_BOILINGTHERMOSUSED_DESC";
+            boilingThermosUsed.loreToken = "SF_BOILINGTHERMOSUSED_LORE";
+            
+            boilingThermos._itemTierDef = Addressables.LoadAssetAsync<ItemTierDef>("RoR2/Base/Common/Tier1Def.asset")
                 .WaitForCompletion();
-            myItemDef2._itemTierDef = Addressables.LoadAssetAsync<ItemTierDef>("RoR2/Base/Common/NoTier.asset")
+            boilingThermosUsed._itemTierDef = Addressables.LoadAssetAsync<ItemTierDef>("RoR2/Base/Common/NoTier.asset")
                 .WaitForCompletion();
-            // Instead of loading the itemtierdef directly, you can also do this like below as a workaround
-            // myItemDef.deprecatedTier = ItemTier.Tier2;
 
-            // You can create your own icons and prefabs through assetbundles, but to keep this boilerplate brief, we'll be using question marks.
-            myItemDef.pickupIconSprite = Addressables
+            boilingThermos.pickupIconSprite = Addressables
                 .LoadAssetAsync<Sprite>("RoR2/Base/Common/MiscIcons/texMysteryIcon.png").WaitForCompletion();
-            myItemDef.pickupModelPrefab = Addressables
+            boilingThermos.pickupModelPrefab = Addressables
                 .LoadAssetAsync<GameObject>("RoR2/Base/Mystery/PickupMystery.prefab").WaitForCompletion();
     
-            myItemDef2.pickupIconSprite = Addressables
+            boilingThermosUsed.pickupIconSprite = Addressables
                 .LoadAssetAsync<Sprite>("RoR2/Base/Common/MiscIcons/texMysteryIcon.png").WaitForCompletion();
             
-            myItemDef.canRemove = true;
-            myItemDef2.canRemove = false;
+            boilingThermos.canRemove = true;
+            boilingThermosUsed.canRemove = false;
 
-            myItemDef.hidden = false;
-            myItemDef2.hidden = false;
-            myItemDef2.tags = [ItemTag.WorldUnique];
+            boilingThermos.hidden = false;
+            boilingThermosUsed.hidden = false;
+            boilingThermosUsed.tags = [ItemTag.WorldUnique]; // prevent usedthermos from being in item pool
 
-            // You can add your own display rules here,
-            // where the first argument passed are the default display rules:
-            // the ones used when no specific display rules for a character are found.
-            // For this example, we are omitting them,
-            // as they are quite a pain to set up without tools like https://thunderstore.io/package/KingEnderBrine/ItemDisplayPlacementHelper/
             var displayRules = new ItemDisplayRuleDict(null);
 
-            // Then finally add it to R2API
-            ItemAPI.Add(new CustomItem(myItemDef, displayRules));
-            ItemAPI.Add(new CustomItem(myItemDef2, displayRules));
-            myBuffDef = ScriptableObject.CreateInstance<BuffDef>();
-            myBuffDef.isDebuff = false;
-            myBuffDef.buffColor = Color.white;
-            myBuffDef.iconSprite = Addressables.LoadAssetAsync<Sprite>("RoR2/Base/Common/MiscIcons/texMysteryIcon.png")
+            ItemAPI.Add(new CustomItem(boilingThermos, displayRules));
+            ItemAPI.Add(new CustomItem(boilingThermosUsed, displayRules));
+            
+            boilingThermosBuff = ScriptableObject.CreateInstance<BuffDef>();
+            boilingThermosBuff.isDebuff = false;
+            boilingThermosBuff.buffColor = Color.white;
+            boilingThermosBuff.iconSprite = Addressables.LoadAssetAsync<Sprite>("RoR2/Base/Common/MiscIcons/texMysteryIcon.png")
                 .WaitForCompletion();
-            myBuffDef.isCooldown = false;
-            myBuffDef.canStack = true;
-            R2API.ContentAddition.AddBuffDef(myBuffDef);
-
-            // But now we have defined an item, but it doesn't do anything yet. So we'll need to define that ourselves.
-
-            //CharacterBody.OnInventoryChanged += CharacterBody_OnInventoryChanged;
-            On.RoR2.Inventory.GiveItem_ItemIndex_int += Inventory_GiveItem_ItemDef_int;
-            On.RoR2.Inventory.RemoveItem_ItemIndex_int += Inventory_RemoveItem_ItemDef_int;
+            boilingThermosBuff.isCooldown = false;
+            boilingThermosBuff.canStack = true;
+            ContentAddition.AddBuffDef(boilingThermosBuff);
+            
+            Inventory.GiveItem_ItemIndex_int += Inventory_GiveItem_ItemDef_int;
+            Inventory.RemoveItem_ItemIndex_int += Inventory_RemoveItem_ItemDef_int;
             RecalculateStatsAPI.GetStatCoefficients += RecalculateStatsAPI_GetStatCoefficients;
             MultiShopCardUtils.OnMoneyPurchase += MultiShopCardUtils_OnMoneyPurchase;
-            On.RoR2.CharacterBody.Start += CharacterBody_Start;
-            
+            CharacterBody.Start += CharacterBody_Start;
         }
         
-
-
 
         private void Inventory_RemoveItem_ItemDef_int(Inventory.orig_RemoveItem_ItemIndex_int orig, RoR2.Inventory self,
             ItemIndex itemindex, int count)
         {
             orig(self, itemindex, count);
-            Logger.LogInfo("GiveItem_ItemDef_int " + itemindex);
-            var itemindex2 = ItemCatalog.FindItemIndex(myItemDef.name);
-            if (itemindex == itemindex2)
+
+            var thermosIndex = ItemCatalog.FindItemIndex(boilingThermos.name);
+            if (itemindex == thermosIndex)
             {
-                if (self.GetItemCount(myItemDef) == 0)
+                if (self.GetItemCount(boilingThermos) == 0)
                 {
-                    for(int i = 0; i < buffAmount; i++)
+                    var buffCount = self.GetComponent<CharacterMaster>().GetBody().GetBuffCount(boilingThermosBuff);
+                    for(int i = 0; i < buffCount; i++)
                     {
-                        self.GetComponent<RoR2.CharacterMaster>().GetBody().RemoveBuff(myBuffDef);
+                        self.GetComponent<CharacterMaster>().GetBody().RemoveBuff(boilingThermosBuff);
                     }
                 }
 
@@ -164,13 +115,13 @@ namespace ExamplePlugin
             orig(self, itemIndex, count);
             if (self != null)
             {
-                var itemindex = ItemCatalog.FindItemIndex(myItemDef.name);
-                if (itemIndex == itemindex && self.GetItemCount(itemindex) - count == 0)
+                var thermosIndex = ItemCatalog.FindItemIndex(boilingThermos.name);
+                if (itemIndex == thermosIndex && self.GetItemCount(thermosIndex) - count == 0) // only give buff on first pickup
                 {
-                    if (self.GetComponent<RoR2.CharacterMaster>() != null)
+                    if (self.GetComponent<CharacterMaster>() != null)
                         for (int i = 0; i < buffAmount; i++)
                         {
-                            self.GetComponent<RoR2.CharacterMaster>().GetBody().AddBuff(myBuffDef);
+                            self.GetComponent<CharacterMaster>().GetBody().AddBuff(boilingThermosBuff);
                         }
                 } 
             }
@@ -181,79 +132,58 @@ namespace ExamplePlugin
             orig(self);
             if (self.inventory != null)
             {
-                int itemCount = self.inventory.GetItemCount(myItemDef2);
+                int itemCount = self.inventory.GetItemCount(boilingThermosUsed);
                 
                 if (itemCount > 0)
                 {
-                    self.inventory.RemoveItem(myItemDef2, itemCount);
-                    self.inventory.GiveItem(myItemDef, itemCount);
+                    self.inventory.RemoveItem(boilingThermosUsed, itemCount);
+                    self.inventory.GiveItem(boilingThermos, itemCount);
                 }
 
-                itemCount = self.inventory.GetItemCount(myItemDef);
+                itemCount = self.inventory.GetItemCount(boilingThermos);
 
                 if (itemCount > 0)
                 {
-                    CharacterMasterNotificationQueue.SendTransformNotification(self.master, myItemDef2.itemIndex, myItemDef.itemIndex, CharacterMasterNotificationQueue.TransformationType.Default);
-
-                    //for (int i = 0; i < buffAmount; i++)
-                    //{
-                    //    self.GetBody().AddBuff(myBuffDef);
-                    //}
+                    CharacterMasterNotificationQueue.SendTransformNotification(self.master, boilingThermosUsed.itemIndex, boilingThermos.itemIndex, CharacterMasterNotificationQueue.TransformationType.Default);
                 }
-                
             }
         }
 
         private void MultiShopCardUtils_OnMoneyPurchase(MultiShopCardUtils.orig_OnMoneyPurchase orig, CostTypeDef.PayCostContext context)
         {
             orig(context);
-            if (context.activatorBody.inventory.GetItemCount(myItemDef) > 0)
+            if (context.activatorBody.inventory.GetItemCount(boilingThermos) > 0)
             {
-                context.activatorBody.RemoveBuff(myBuffDef);
-                if (context.activatorBody.GetBuffCount(myBuffDef) % buffAmount == 0)
+                context.activatorBody.RemoveBuff(boilingThermosBuff);
+                if (context.activatorBody.GetBuffCount(boilingThermosBuff) % buffAmount == 0)
                 {
-                    for(int i = 0; i < context.activatorBody.inventory.GetItemCount(myItemDef); i++)
+                    for(int i = 0; i < context.activatorBody.inventory.GetItemCount(boilingThermos); i++)
                     {
-                        context.activatorBody.inventory.GiveItem(myItemDef2);
-                        
+                        context.activatorBody.inventory.GiveItem(boilingThermosUsed);
                     }
-                    for (int i = 0; i < context.activatorBody.inventory.GetItemCount(myItemDef2); i++) // we need to do it after because otherwise it changes how many loops it goes through and only removes like half lol
+                    for (int i = 0; i < context.activatorBody.inventory.GetItemCount(boilingThermosUsed); i++) // we need to do it after because otherwise it changes how many loops it goes through and only removes like half lol
                     {
-                        context.activatorBody.inventory.RemoveItem(myItemDef);
+                        context.activatorBody.inventory.RemoveItem(boilingThermos);
                     }
-                    CharacterMasterNotificationQueue.SendTransformNotification(context.activatorBody.master, myItemDef.itemIndex, myItemDef2.itemIndex, CharacterMasterNotificationQueue.TransformationType.Default);
-
+                    CharacterMasterNotificationQueue.SendTransformNotification(context.activatorBody.master, boilingThermos.itemIndex, boilingThermosUsed.itemIndex, CharacterMasterNotificationQueue.TransformationType.Default);
                 }
-
             }
         }
 
         private void RecalculateStatsAPI_GetStatCoefficients(RoR2.CharacterBody sender, RecalculateStatsAPI.StatHookEventArgs args)
         {
-            
             if(sender)
             {
-                int count = sender.GetBuffCount(myBuffDef);
+                int count = sender.GetBuffCount(boilingThermosBuff);
                 if(count != 0)
                 {
                     Logger.LogInfo("starting moveSpeedMultAdd: " + args.moveSpeedMultAdd);
-                    args.moveSpeedMultAdd += 0.035f * sender.GetBuffCount(myBuffDef) + (4f - 0.035f * sender.GetBuffCount(myBuffDef)) * (1f - 1f / (1f + 0.009f * sender.GetBuffCount(myBuffDef) * (sender.inventory.GetItemCount(myItemDef) - 1f))); //(1f-1f/(1f+0.035f*sender.GetBuffCount(myBuffDef)*(sender.inventory.GetItemCount(myItemDef)))); //0.035f*48 + (5f - 0.035f) * (1 - 1 / (1 + 0.035f * ((sender.inventory.GetItemCount(myItemDef)- 1 * sender.GetBuffCount(myBuffDef)) ))); //baseValue + (maxValue - baseValue) * (1 - 1 / (1 + additionalValue * (itemCount - 1)));
+                    args.moveSpeedMultAdd += 0.035f * sender.GetBuffCount(boilingThermosBuff) + (4f - 0.035f * sender.GetBuffCount(boilingThermosBuff)) * (1f - 1f / (1f + 0.009f * sender.GetBuffCount(boilingThermosBuff) * (sender.inventory.GetItemCount(boilingThermos) - 1f))); //(1f-1f/(1f+0.035f*sender.GetBuffCount(boilingThermosBuff)*(sender.inventory.GetItemCount(boilingThermos)))); //0.035f*48 + (5f - 0.035f) * (1 - 1 / (1 + 0.035f * ((sender.inventory.GetItemCount(boilingThermos)- 1 * sender.GetBuffCount(boilingThermosBuff)) ))); //baseValue + (maxValue - baseValue) * (1 - 1 / (1 + additionalValue * (itemCount - 1)));
                     Logger.LogInfo("Ending moveSpeedMultAdd: " + args.moveSpeedMultAdd);
                 }
             }
         }
-        public static float GetHyperbolic(float firstStack, float cap, float chance) // Util.ConvertAmplificationPercentageIntoReductionPercentage but Better :zanysoup: // i heart stealing from wellroundedbalance
-        {
-            if (firstStack >= cap) return cap * (chance / firstStack); // should not happen, but failsafe
-            float count = chance / firstStack;
-            float coeff = 100 * firstStack / (cap - firstStack); // should be good
-            return cap * (1 - (100 / ((count * coeff) + 100)));
-        }
 
-        
-        
-
-        // The Update() method is run on every frame of the game.
         private void Update()
         {
             // This if statement checks if the player has currently pressed F2.
@@ -263,9 +193,8 @@ namespace ExamplePlugin
                 var transform = PlayerCharacterMasterController.instances[0].master.GetBodyObject().transform;
 
                 // And then drop our defined item in front of the player.
-
                 Log.Info($"Player pressed F2. Spawning our custom item at coordinates {transform.position}");
-                PickupDropletController.CreatePickupDroplet(PickupCatalog.FindPickupIndex(myItemDef.itemIndex), transform.position, transform.forward * 20f);
+                PickupDropletController.CreatePickupDroplet(PickupCatalog.FindPickupIndex(boilingThermos.itemIndex), transform.position, transform.forward * 20f);
             }
         }
     }
